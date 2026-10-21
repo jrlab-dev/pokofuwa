@@ -1,0 +1,10 @@
+{
+  "name": "ちいさなともだち「ぽこ・ふわ」",
+  "short_name": "ちいさなともだち",
+  "lang": "ja",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5efff",
+  "theme_color": "#f5efff",
+  "icons": [{"src":"icons/poko.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
