@@ -1244,7 +1244,7 @@
     if (speechAvailable) window.speechSynthesis.cancel();
     state.voice.stopPlayback();  /* 再生中に別のボタン → 前のを止めて新しい方を流す */
     /* ぽこ・ふわはまねっこと同じ echoTuning の設定で加工。静かな時間は半分の音量（playRadioClip の中） */
-    const result = await state.voice.playRadioClip({ blob:clip.blob, tuning:kind === 'normal' ? null : echoTuning(kind), quiet:Life.isQuietTime(new Date()) });
+    const result = await state.voice.playRadioClip({ blob:clip.blob, clock:clip.source === 'clock', tuning:kind === 'normal' ? null : echoTuning(kind), quiet:Life.isQuietTime(new Date()) });
     if (token !== state.radioPlayToken || state.radioRecording || !$('radio-dialog').open) return;
     if (!result || !result.ok) {
       if (token !== state.radioPlayToken || state.radioRecording) return;
@@ -1279,10 +1279,13 @@
       button.setAttribute('aria-label', recording ? 'おんがくの ろくおんを とめて保存' : 'ラジカセに おんがくを ろくおん');
       button.dataset.recording = String(recording);
     }
+    const clockButton = $('music-clock-record');
+    if (clockButton) clockButton.disabled = recording;
     if (remaining) { remaining.hidden = !recording; remaining.textContent = recording ? `のこり ${Number(value.remainingSeconds) || 0}` : ''; }
     if (message) {
       if (!recording && !radioEnabled()) message.textContent = '保護者設定で「ろくおんあそび」をオンにしてね';
       else if (!recording && state.data && state.data.soundMode === 'text') message.textContent = '音をオンにすると ろくおんできるよ';
+      else if (recording && state.musicRecorder?.clockRequested) message.textContent = '時報をろくおんちゅう。最後の鐘で保存するよ';
       else message.textContent = value.message != null && value.message !== '' ? value.message : '30秒まで。前のろくおんと入れかわるよ';
     }
   }
@@ -1298,6 +1301,13 @@
     if (state.voice) state.voice.stopPlayback();
     const result = await state.musicRecorder.start();
     if (result && !result.ok && result.reason === 'unsupported') musicRecordingUi({ message:'この端末では おんがくを録れないよ' });
+  }
+  async function recordClockChime(score) {
+    if (!state.musicRecorder || state.musicRecorder.recording || state.musicRecorder.clockRequested) return;
+    if (!radioEnabled() || state.data.soundMode === 'text') { musicRecordingUi(); return; }
+    state.musicRhythm.stop();
+    state.voice?.stopPlayback();
+    await state.musicRecorder.start(score);
   }
   function musicLearningStop() { if (state.musicLearning) state.musicLearning.stop(); document.body.classList.remove('music-learning-playing'); }
   function musicRhythmActive() { return Boolean(state.musicRhythm && state.musicRhythm.getState && state.musicRhythm.getState().active); }
@@ -1352,7 +1362,7 @@
     const wasLearn = $('music-learn-mode')?.getAttribute('aria-selected') === 'true';
     const previousPractice = state.musicPracticeMode || (wasRhythm ? 'rhythm' : wasLearn ? 'learn' : '');
     if (state.musicLearning && state.musicRhythm) {
-      if (learn && previousPractice === 'rhythm') { state.musicLearning.setEdition(state.musicRhythm.edition); state.musicLearning.select(state.musicRhythm.trackId); }
+      if (learn && previousPractice === 'rhythm' && state.musicRhythm.trackId !== 'bigben') { state.musicLearning.setEdition(state.musicRhythm.edition); state.musicLearning.select(state.musicRhythm.trackId); }
       if (rhythm && previousPractice === 'learn') { state.musicRhythm.setEdition(state.musicLearning.edition); state.musicRhythm.select(state.musicLearning.trackId); }
     }
     if (learn || rhythm) state.musicPracticeMode = mode;
@@ -1996,7 +2006,7 @@
     }
     if (MusicVideo) state.musicVideo = MusicVideo.mount({ audioBus:state.musicAudioBus, beforeView:() => { musicStop(); cancelMusicRecording('video-view'); } });
     if (MusicRhythm && MusicRhythm.MusicRhythmController) {
-      state.musicRhythm = new MusicRhythm.MusicRhythmController({ onRunStart:controller => state.musicVideo?.start(controller), onRunFinish:value => state.musicVideo?.finish(value), onRunCancel:() => state.musicVideo?.cancel(), onInstrumentChange: value => state.musicLearning?.setInstrument(value), scoreData:window.LittleCompanionMusicScoreData || null, trackIds:MusicBox ? MusicBox.TRACKS.map(track => track.id) : [], audioContext:musicRoute && musicRoute.context, outputNode:musicRoute && musicRoute.output, beforePlay:() => {
+      state.musicRhythm = new MusicRhythm.MusicRhythmController({ recordClock:recordClockChime, onRunStart:controller => state.musicVideo?.start(controller), onRunFinish:value => state.musicVideo?.finish(value), onRunCancel:() => { state.musicVideo?.cancel(); if (state.musicRecorder?.clockRequested) cancelMusicRecording(); }, onInstrumentChange: value => state.musicLearning?.setInstrument(value), scoreData:window.LittleCompanionMusicScoreData || null, trackIds:MusicBox ? MusicBox.TRACKS.map(track => track.id) : [], audioContext:musicRoute && musicRoute.context, outputNode:musicRoute && musicRoute.output, beforePlay:() => {
         if (state.data && state.data.soundMode === 'text') { showMusicMuteHint(); return false; }
         if (state.musicPlayer && state.musicPlayer.trackId) { state.musicPlayer.stop(); musicRefresh(); }
         if (state.musicLearning) state.musicLearning.stop();

@@ -1240,7 +1240,7 @@
 
 
 
-  VoiceMemory.prototype.playRadioClip = async function ({ blob, tuning, quiet } = {}) {
+  VoiceMemory.prototype.playRadioClip = async function ({ blob, tuning, quiet, clock = false } = {}) {
     if (!this.AudioContext || this.destructiveOps) return { ok:false, reason:'missing' };
     if (!isBlob(blob) || !blob.size || blob.size > RADIO_MAX_BYTES || !supportedMime(blob.type)) return { ok:false, reason:'invalid-radio-clip' };
     const usesTuning = tuning !== undefined && tuning !== null;
@@ -1268,7 +1268,8 @@
         const bytes = await Promise.race([blob.arrayBuffer(), preparation]);
         const audio = await Promise.race([context.decodeAudioData(bytes.slice(0)), preparation]);
         if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) throw new Error('invalid-audio');
-        if (audio.duration * 1000 > RADIO_PLAY_MAX_MS) throw new Error('invalid-radio-clip');
+        const playLimit = clock ? 81000 : RADIO_MAX_DURATION_MS;
+        if (audio.duration * 1000 > playLimit + RADIO_TOLERANCE_MS) throw new Error('invalid-radio-clip');
         if (!await stillCurrent()) throw new Error('invalidated');
 
         const peak = audioPeak(audio);
@@ -1289,7 +1290,7 @@
           durationMs = Math.ceil(audio.duration * 1000);
         } else {
           /* ぽこ・ふわ：まねっこと同じフィルター・圧縮器・粒の計画（まねっこのmainGain .75の代わりに正規化した音量を入れる） */
-          const durationSeconds = Math.min(RADIO_MAX_DURATION_MS / 1000, audio.duration);
+          const durationSeconds = Math.min(playLimit / 1000, audio.duration);
           const high = context.createBiquadFilter();
           const low = context.createBiquadFilter();
           const peakFilter = context.createBiquadFilter();
@@ -1309,7 +1310,7 @@
           if (echoGain) echoGain.connect(context.destination);
           const baseTime = context.currentTime + .02;
           if (settings.timingMode === 'preserve') {
-            const plan = grainPlan(durationSeconds, settings.pitchRate, RADIO_MAX_DURATION_MS, RADIO_MAX_GRAINS);
+            const plan = grainPlan(durationSeconds, settings.pitchRate, playLimit, Math.ceil(playLimit / GRAIN_HOP_MS));
             const audibleEnd = plan.reduce((end, grain) => Math.max(end, grain.offset / settings.speedRate + grain.duration / settings.pitchRate), 0);
             let nextGrain = 0;
             const schedule = () => {

@@ -846,3 +846,7 @@ body.music-playing .pet:not([data-state="sleepy"]):not([data-sulk]):not([data-aw
 .music-effects-quiet .music-rhythm-key-feedback,.music-effects-quiet .music-rhythm-feedback,.music-effects-quiet .music-rhythm-key.is-cue{animation:none!important;transition:none!important}
 @media(max-height:500px) and (orientation:landscape){.music-result-pet{width:24px;height:26px;flex-basis:24px}.music-rhythm-lane .music-rhythm-result{gap:16px}}
 @media(max-width:520px){.music-result-pet{display:none}}
+
+.music-clock-controls { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 4px 0; }
+.music-clock-controls label { display: flex; align-items: center; gap: 5px; }
+.music-clock-controls select { min-height: 44px; padding: 4px 8px; border: 2px solid #ded4f1; border-radius: 12px; background: white; color: var(--ink); font: inherit; }

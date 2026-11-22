@@ -23,13 +23,13 @@
   const isBlob = value => typeof Blob !== 'undefined' && value instanceof Blob;
 
   /* 純粋な判定：この録音で前の録音を入れ替えてよいか（上書き判定）。保存もこの判定を通す */
-  const radioVerdict = ({ durationMs, bytes, mimeType } = {}) => {
+  const radioVerdict = ({ durationMs, bytes, mimeType, source } = {}) => {
     const duration = Number(durationMs) || 0;
     const size = Number(bytes) || 0;
     if (!supportedMime(mimeType)) return { ok:false, reason:'unsupported-mime' };
     if (size <= 0 || size > MAX_BYTES) return { ok:false, reason:'invalid-size' };
     if (duration < MIN_KEEP_MS) return { ok:false, reason:'too-short' };
-    if (duration > MAX_DURATION_MS + DURATION_TOLERANCE_MS) return { ok:false, reason:'too-long' };
+    if (duration > (source === 'clock' ? 81000 : MAX_DURATION_MS) + DURATION_TOLERANCE_MS) return { ok:false, reason:'too-long' };
     return { ok:true };
   };
 
@@ -86,14 +86,16 @@
       const row = await this._run('readonly', store => store.get(CLIP_ID));
       if (!row || row.id !== CLIP_ID || !isBlob(row.blob)) return null;
       const clip = { id:CLIP_ID, blob:row.blob, mimeType:String(row.mimeType || row.blob.type || ''), durationMs:Number(row.durationMs) || 0, bytes:row.blob.size, recordedAt:String(row.recordedAt || '') };
+      if (row.source === 'clock') clip.source = 'clock';
       return radioVerdict(clip).ok ? clip : null;
     } catch (_) { return null; }
   };
 
   /* 1本だけの保存（上書き）。保存してよいかは radioVerdict で決める */
-  RadioRecorder.prototype.save = async function ({ blob, mimeType, durationMs, bytes } = {}) {
+  RadioRecorder.prototype.save = async function ({ blob, mimeType, durationMs, bytes, source } = {}) {
     if (!isBlob(blob)) return { ok:false, reason:'invalid-blob' };
     const clip = { id:CLIP_ID, blob, mimeType:String(mimeType || blob.type || ''), durationMs:Math.round(Number(durationMs) || 0), bytes:blob.size, recordedAt:new Date(this.now()).toISOString() };
+    if (source === 'clock') clip.source = 'clock';
     const verdict = radioVerdict(clip);
     if (!verdict.ok) return { ok:false, reason:verdict.reason };
     const pending = { tx:null, cancelled:false };

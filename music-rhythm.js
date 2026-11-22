@@ -1,8 +1,8 @@
 /* おんがくリズムゲーム。表示・採点・任意の伴奏は音声の時計を共有する。 */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./music-tablet.js'), require('./music-instruments.js'), require('./music-accompaniment.js'), require('./music-effects.js'));
-  else root.LittleCompanionMusicRhythm = factory(root.LittleCompanionMusicTablet, root.LittleCompanionMusicInstruments, root.LittleCompanionMusicAccompaniment, root.LittleCompanionMusicEffects);
-}(typeof self !== 'undefined' ? self : this, function (Tablet, Instruments, Accompaniment, Effects) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./music-tablet.js'), require('./music-instruments.js'), require('./music-accompaniment.js'), require('./music-effects.js'), require('./music-clock.js'));
+  else root.LittleCompanionMusicRhythm = factory(root.LittleCompanionMusicTablet, root.LittleCompanionMusicInstruments, root.LittleCompanionMusicAccompaniment, root.LittleCompanionMusicEffects, root.LittleCompanionMusicClock);
+}(typeof self !== 'undefined' ? self : this, function (Tablet, Instruments, Accompaniment, Effects, Clock) {
   'use strict';
 
   const COUNTDOWN_MS = 3000;
@@ -89,6 +89,9 @@
   function MusicRhythmController(options = {}) {
     this.data = options.scoreData || null;
     this.trackIds = Array.isArray(options.trackIds) ? options.trackIds.slice() : [];
+    this.clockHour = new Date().getHours() % 12 || 12;
+    this.recordClock = options.recordClock;
+    if (this.recordClock) this.trackIds.push('bigben');
     this.audioContext = options.audioContext || null;
     this.outputNode = options.outputNode || null;
     this.audioContextFactory = options.audioContextFactory || null;
@@ -158,7 +161,7 @@
     const ctx = this.ctx;
     return ctx && Number.isFinite(ctx.currentTime) ? ctx.currentTime : this.now() / 1000;
   };
-  MusicRhythmController.prototype.getScore = function (id) { const score = getScoreMap(this.data)[id]; return normalizeScore(score && score.id ? Tablet.arrange(score, this.edition) : null); };
+  MusicRhythmController.prototype.getScore = function (id) { if (id === 'bigben') return normalizeScore(Clock.score(this.clockHour)); const score = getScoreMap(this.data)[id]; return normalizeScore(score && score.id ? Tablet.arrange(score, this.edition) : null); };
   MusicRhythmController.prototype.setInstrument = function (instrument) {
     const next = Instruments.normalize(instrument);
     if (next === this.instrument) return;
@@ -495,6 +498,17 @@
       this.renderSignature = signature;
       const groups = Object.keys(DIFFICULTIES).map(group => `<optgroup label="${DIFFICULTIES[group]}">${this.trackIds.filter(id => difficultyFor(id).group === group).map(id => { const score = this.getScore(id); return score ? `<option value="${id}">${score.title || id}</option>` : ''; }).join('')}</optgroup>`).join('');
       this.root.innerHTML = `<div class="music-rhythm-picker"><label for="music-rhythm-track">曲をえらぶ</label><select id="music-rhythm-track">${groups}</select><span class="music-rhythm-difficulty"></span></div><p class="music-rhythm-guide">ひかりが線にきたら おしてね。長い音も おしはじめだけだよ</p><div class="music-rhythm-stage"><div class="music-rhythm-scroll"><div class="music-rhythm-lane"><div class="music-rhythm-hitline" aria-hidden="true"></div><div class="music-rhythm-notes"></div></div><div class="music-rhythm-keyboard-wrap"><div class="music-rhythm-keyboard"></div></div></div></div><div class="music-rhythm-controls"><button type="button" class="music-rhythm-start">▶ はじめる</button><button type="button" class="music-rhythm-stop">■ とめる</button><div class="music-rhythm-speed" role="group" aria-label="速さ">${Object.keys(SPEEDS).map(key => `<button type="button" data-rhythm-speed="${key}">${SPEED_LABELS[key]}</button>`).join('')}</div></div><p class="music-rhythm-status"></p>`;
+      if (this.trackId === 'bigben') {
+        const controls = document.createElement('div');
+        controls.className = 'music-clock-controls';
+        controls.innerHTML = '<label>時刻 <select aria-label="時報の時刻"></select></label><button type="button" id="music-clock-record" class="small-button">時報をラジカセに録音</button><small>最後の鐘まで自動で録るよ。前の録音と入れかわるよ。</small>';
+        const hour = controls.querySelector('select');
+        for (let h = 1; h <= 12; h++) hour.add(new Option(h + '時', h));
+        hour.value = this.clockHour;
+        hour.onchange = () => { this.clockHour = Number(hour.value); this.select('bigben'); };
+        controls.querySelector('button').onclick = () => this.recordClock(this.score);
+        this.root.querySelector('.music-rhythm-picker').after(controls);
+      }
       const select = this.root.querySelector('#music-rhythm-track'); if (select) { select.value = this.trackId; select.addEventListener('change', () => this.select(select.value)); }
       this.root.querySelector('.music-rhythm-picker').insertAdjacentHTML('beforeend', `<select class="music-edition" aria-label="リズムの演奏版"><option value="tablet">タブレット版</option><option value="original">原曲版</option></select>`);
       const edition = this.root.querySelector('.music-edition'); edition.value = this.edition; edition.addEventListener('change', () => this.setEdition(edition.value));
@@ -551,6 +565,8 @@
     if (accompanimentVolume) { accompanimentVolume.value = String(Math.round(this.accompanimentVolume * 100)); accompanimentVolume.disabled = !this.accompaniment; }
     const accompanimentLevel = this.root.querySelector('.music-accompaniment-volume output'); if (accompanimentLevel) accompanimentLevel.textContent = `${Math.round(this.accompanimentVolume * 100)}%`;
     const difficulty = this.root.querySelector('.music-rhythm-difficulty'); if (difficulty) difficulty.textContent = DIFFICULTIES[difficultyFor(this.trackId).group];
+    const accompanimentControls = this.root.querySelector('.music-accompaniment-controls');
+    if (accompanimentControls) accompanimentControls.hidden = this.trackId === 'bigben';
     const fits = this.fitsViewport();
     this.root.classList.toggle('is-tablet', this.edition === 'tablet');
     this.root.classList.toggle('is-width-blocked', !fits);
